@@ -1,6 +1,7 @@
 package net.domraczpvp.java.onlinechat.server;
 
 import java.net.Socket;
+import java.util.List;
 
 public class Client {
     private final Socket clientSocket;
@@ -9,6 +10,10 @@ public class Client {
     private boolean isJoined;
 
     private boolean isAdmin;
+
+    private boolean isMuted;
+
+    private List<String> permissions;
 
     public Client(Socket client, String username) {
         clientSocket = client;
@@ -45,5 +50,25 @@ public class Client {
 
     public void setAdmin(boolean value) {
         isAdmin = value;
+    }
+
+    public void setMuted(boolean value) {
+        isMuted = value;
+    }
+
+    public boolean isMuted() {
+        return isMuted;
+    }
+
+    public void addPermissionNode(String node) {
+        permissions.add(node);
+    }
+
+    public void removePermissionNode(String node) {
+        permissions.remove(node);
+    }
+
+    public boolean hasNode(String node) {
+        return permissions.contains(node);
     }
 }
