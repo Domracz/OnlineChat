@@ -1,14 +1,17 @@
 package net.domraczpvp.java.onlinechat.client;
 
+import net.domraczpvp.java.onlinechat.server.Client;
+
 import javax.swing.*;
 import java.io.*;
 import java.net.Socket;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
-import java.util.Objects;
 import java.util.Scanner;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicMarkableReference;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -102,31 +105,32 @@ public class ClientMain {
             System.out.println("Name change was successful!");
             System.out.println("Starting packet listener...");
             AtomicBoolean isRunning = new AtomicBoolean(true);
+            AtomicReference<String> kickreason = new AtomicReference<>();
+            kickreason.set(null);
             final String usernamefinal = username;
             Thread listener = new Thread(() -> {
                 while (isRunning.get()) {
                     try {
                         if (in.available() > 0) {
                             String data = reader.readLine();
-                            String[] datasplit = data.split("@");
+                            String[] datasplit = splitData(data);
                             switch (datasplit[0]) {
-                                case "MSG":
+                                case "MSG" -> {
                                     System.out.println("\n" + unescapeString(datasplit[1]));
                                     System.out.print(usernamefinal + ": ");
-                                    break;
-                                case "KKD":
-                                    showKickDialog(unescapeString(datasplit[1]));
-                                    break;
-                                case "BND":
-                                    showBanDialog(unescapeString(datasplit[1]));
-                                    break;
-                                case "MSGB":
+                                }
+                                case "KKD" -> showKickDialog(unescapeString(datasplit[1]));
+                                case "BND" -> showBanDialog(unescapeString(datasplit[1]));
+                                case "MSGB" -> {
                                     String[] parts = splitParts(datasplit[1]);
                                     for (String line : parts) {
                                         System.out.println(line);
                                     }
                                     System.out.println(usernamefinal + ": ");
-                                    break;
+                                }
+                                case "MED" -> showMuteDialog(datasplit[1]);
+                                case "STKR" -> kickreason.set(unescapeString(datasplit[1]));
+                                case "exit" -> isRunning.set(false);
                             }
 
                         }
@@ -144,29 +148,32 @@ public class ClientMain {
             writer.flush();
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                 try {
-                    connection.close();
+                    closeConnection(connection);
                 } catch (IOException ignored) {
 
                 }
             }));
             System.out.println("Joined server!");
             input = new Scanner(System.in);
-            while (true) {
+            while (connection.isConnected()) {
                 if (input.hasNextLine()) {
-                    writer.println("SND@" + input.nextLine());
+                    writer.println("SND@" + escapeString(input.nextLine()));
                     writer.flush();
                     System.out.print(usernamefinal + ": ");
-                }
-                if (connection.isClosed()) {
-                    break;
                 }
             }
             isRunning.set(false);
             for (int i = 0; i < 1000; i++) {
                 System.out.println("\n");
             }
-            System.err.println("The connection was closed by the remote host.");
-            int input = JOptionPane.showOptionDialog(null, "The connection was closed by the remote host.", "Disconnected", JOptionPane.YES_NO_CANCEL_OPTION, JOptionPane.ERROR_MESSAGE, null, new String[]{"Reconnect", "Back to login", "Close"}, 2);
+            int input = 2;
+            if (kickreason.get() == null) {
+                System.out.println("The connection was closed by the remote host.");
+                input = JOptionPane.showOptionDialog(null, "The connection was closed by the remote host.", "Disconnected", JOptionPane.YES_NO_CANCEL_OPTION, JOptionPane.ERROR_MESSAGE, null, new String[]{"Reconnect", "Back to login", "Close"}, 2);
+            }else{
+                System.out.println("The connection was closed by the remote host.");
+                input = JOptionPane.showOptionDialog(null, kickreason.get(), "Disconnected", JOptionPane.YES_NO_CANCEL_OPTION, JOptionPane.ERROR_MESSAGE, null, new String[]{"Reconnect", "Back to login", "Close"}, 2);
+            }
             if (input == 0) {
                 System.out.println("Reconnecting.");
                 connect(serverip, username);
@@ -177,8 +184,14 @@ public class ClientMain {
                 System.out.println("Shutting down...");
                 System.exit(0);
             }
+
         } catch (Exception e) {
-            System.err.println("Something went wrong in the system. Please try again later.");
+            System.out.println("Something went wrong in the system. Please try again later.");
+            try {
+                closeConnection(connection);
+            }catch (IOException i) {
+                System.err.println("Failed to close socket: " + i.getMessage());
+            }
             e.printStackTrace();
         }
     }
@@ -189,8 +202,19 @@ public class ClientMain {
            String kickusername = JOptionPane.showInputDialog(message);
            String reason = JOptionPane.showInputDialog("Enter reason: ");
            PrintWriter writer = new PrintWriter(out, true);
-           writer.println("KK@" + kickusername + "&" + reason);
+           writer.println("KK@" + kickusername + "&" + escapeString(reason));
            writer.flush();
+        });
+        dialog.start();
+    }
+
+    public static void showMuteDialog(String message) {
+        Thread dialog = new Thread(() -> {
+            String kickusername = JOptionPane.showInputDialog(message);
+            String reason = JOptionPane.showInputDialog("Enter reason: ");
+            PrintWriter writer = new PrintWriter(out, true);
+            writer.println("MT@" + kickusername + "&" + escapeString(reason));
+            writer.flush();
         });
         dialog.start();
     }
@@ -200,7 +224,7 @@ public class ClientMain {
             String banusername = JOptionPane.showInputDialog(message);
             String reason = JOptionPane.showInputDialog("Enter reason: ");
             PrintWriter writer = new PrintWriter(out, true);
-            writer.println("BN@" + banusername + "&" + reason);
+            writer.println("BN@" + banusername + "&" + escapeString(reason));
             writer.flush();
         });
         dialog.start();
@@ -211,5 +235,12 @@ public class ClientMain {
     }
     public static String escapeString(String str) {
         return str.replaceAll("\\\\", "\\\\\\\\").replaceAll("@", "\\\\@");
+    }
+
+    public static void closeConnection(Socket socket) throws IOException{
+        PrintWriter writer = new PrintWriter(socket.getOutputStream(), true);
+        writer.println("exit");
+        writer.close();
+        socket.close();
     }
 }

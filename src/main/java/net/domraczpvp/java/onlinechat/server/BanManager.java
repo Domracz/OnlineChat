@@ -13,7 +13,7 @@ public class BanManager {
         try {
             File file = new File("bans.txt");
             if (!file.exists()) {
-                Boolean result = file.createNewFile();
+                boolean result = file.createNewFile();
                 if (result) {
                     System.out.println("Success.");
                 }else{
@@ -21,7 +21,7 @@ public class BanManager {
                 }
             }
             FileWriter writer = new FileWriter(file, true);
-            writer.write(ip + "@" + reason + "\n"); // add the line to the file
+            writer.write(ip + "@" + "\n"); // add the line to the file
             writer.close(); // close the writer to release resources
         } catch (IOException e) {
             System.out.println("An error occurred while adding the line to the file: " + e.getMessage());
@@ -32,7 +32,7 @@ public class BanManager {
         try {
             File file = new File("bans.txt");
             if (!file.exists()) {
-                Boolean result = file.createNewFile();
+                boolean result = file.createNewFile();
                 if (result) {
                     System.out.println("Success.");
                 }else{
@@ -66,7 +66,7 @@ public class BanManager {
         try {
             File file = new File("bans.txt");
             if (!file.exists()) {
-                Boolean result = file.createNewFile();
+                boolean result = file.createNewFile();
                 if (result) {
                     System.out.println("Success.");
                 }else{
@@ -100,7 +100,7 @@ public class BanManager {
         try {
             File file = new File("bans.txt");
             if (!file.exists()) {
-                Boolean result = file.createNewFile();
+                boolean result = file.createNewFile();
                 if (result) {
                     System.out.println("Success.");
                 }else{
@@ -119,11 +119,8 @@ public class BanManager {
 
             for (String banline : banlines) {
                 if (banline.startsWith(ip)) {
-                    String[] banSplit = banline.split("@");
-                    String[] banReasons = new String[banSplit.length - 1];
-                    System.arraycopy(banSplit, 0, banReasons, 0, banSplit.length - 1);
-                    String banReason = String.join("@", banReasons);
-                    return banReason;
+                    String[] banSplit = Server.splitData(banline);
+                    return Server.unescapeString(banSplit[1]);
                 }
             }
 

@@ -1,6 +1,7 @@
 package net.domraczpvp.java.onlinechat.server;
 
 import java.net.Socket;
+import java.util.ArrayList;
 import java.util.List;
 
 public class Client {
@@ -15,13 +16,18 @@ public class Client {
 
     private List<String> permissions;
 
+    private boolean isRunning;
+
     public Client(Socket client, String username) {
         clientSocket = client;
         name = username;
+        isRunning = true;
     }
     public Client(Socket client) {
         clientSocket = client;
         name = client.getRemoteSocketAddress().toString();
+        permissions = new ArrayList<>();
+        isRunning = true;
     }
 
     public String getUserName() {
@@ -70,5 +76,13 @@ public class Client {
 
     public boolean hasNode(String node) {
         return permissions.contains(node);
+    }
+
+    public void setRunning(boolean value) {
+        isRunning = value;
+    }
+
+    public boolean getRunning() {
+        return isRunning;
     }
 }

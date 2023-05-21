@@ -7,10 +7,7 @@ import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.sql.SQLOutput;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Scanner;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -34,6 +31,7 @@ public class Server {
                         System.out.println("New Connection: " + client.getInetAddress().getHostAddress());
                         System.out.println("Starting the listener for client " + client.getInetAddress().getHostAddress());
                         Thread userthread = new Thread(() -> clientConnection(clients.size() - 1));
+                        API.connect(clients.get(clients.size() - 1));
                         userthread.start();
                         System.out.println("Started listener.");
                     }
@@ -55,7 +53,13 @@ public class Server {
                 }
             }));
             System.out.println("Started listening on \\" + socket.getInetAddress().getHostAddress() + ":" + socket.getLocalPort());
-            System.out.println("Attempting to start connections...");
+            System.out.println("Loading mods...");
+            API.registerMods();
+            System.out.println("Mods loaded. Here's a list of all of them: ");
+            for (Mod mod : API.mods) {
+                System.out.println(mod.getId());
+            }
+            System.out.println("Server successfully loaded.");
 
         }catch (Exception e) {
             System.err.println("Something went wrong while creating ConsoleChat server. Here's a rundown of the error:");
@@ -115,7 +119,7 @@ public class Server {
 
     public static void clientConnection(int i) {
         Client client = clients.get(i);
-        while (true) {
+        do {
             try {
                 InputStream in = client.getConnection().getInputStream();
                 BufferedReader reader = new BufferedReader(new InputStreamReader(in));
@@ -137,15 +141,15 @@ public class Server {
                                         String[] args = CommandParser.getArgs(parseddata[1]);
                                         String command = CommandParser.getCommand(parseddata[1]);
                                         switch (command) {
-                                            case "reqadmin":
+                                            case "reqadmin" -> {
                                                 if (!client.isAdmin()) {
                                                     sendPrivateMessage("You have requested admin from the server. You will be given admin once the server accepts.", i);
                                                     requestAdmin(i);
                                                 } else {
                                                     sendPrivateMessage("You are already admin!", client);
                                                 }
-                                                break;
-                                            case "msg":
+                                            }
+                                            case "msg" -> {
                                                 if (args.length == 2) {
                                                     if (getClientsByName(args[1]).size() > 0) {
                                                         Client receiver = getClientsByName(args[1]).get(0);
@@ -157,27 +161,30 @@ public class Server {
                                                 } else {
                                                     sendPrivateMessage("Command Usage: /msg <user> <message>", i);
                                                 }
-                                                break;
-                                            case "kick":
+                                            }
+                                            case "kick" -> {
                                                 if (client.isAdmin() | client.hasNode("mod.kick")) {
                                                     sendPrivateMessage("Please use kick dialog", i);
                                                     showKickDialog("Enter the user you want to kick: ", i);
                                                 } else {
                                                     sendPrivateMessage("You are not allowed to do this!", client);
                                                 }
-                                            case "ban":
+                                            }
+                                            case "ban" -> {
                                                 if (client.isAdmin() | client.hasNode("mod.ban")) {
                                                     sendPrivateMessage("Please use ban dialog", i);
                                                     showBanDialog("Enter the user you want to ban: ", i);
                                                 } else {
                                                     sendPrivateMessage("You are not allowed to do this!", client);
                                                 }
-                                            case "getip":
+                                            }
+                                            case "getip" -> {
+                                                System.out.println(Arrays.toString(args));
                                                 if (client.isAdmin()) {
                                                     if (args.length == 1) {
                                                         if (getClientsByName(args[0]).size() > 0) {
                                                             Client getip = getClientsByName(args[0]).get(0);
-                                                            sendPrivateMessage("Ip address of " + getip.getUserName() + "is " + getip.getConnection().getInetAddress().getHostAddress(), i);
+                                                            sendPrivateMessage("Ip address of " + getip.getUserName() + " is " + getip.getConnection().getInetAddress().getHostAddress(), i);
                                                         } else {
                                                             sendPrivateMessage(args[0] + " is not online!", i);
                                                         }
@@ -187,8 +194,8 @@ public class Server {
                                                 } else {
                                                     sendPrivateMessage("You are not allowed to do this!", client);
                                                 }
-                                                break;
-                                            case "list":
+                                            }
+                                            case "list" -> {
                                                 List<String> lines = new ArrayList<>();
                                                 lines.add("List of all users:");
                                                 lines.add("Users suffixed by an \"*\" are admins.");
@@ -196,22 +203,76 @@ public class Server {
                                                 for (Client iuser : clients) {
                                                     if (iuser.isAdmin()) {
                                                         lines.add(iuser.getUserName() + "*");
-                                                    }else{
+                                                    } else {
                                                         lines.add(iuser.getUserName());
                                                     }
                                                 }
                                                 lines.add("----------------------------------");
                                                 sendPrivateMessageBurst(lines, client);
-                                                break;
-                                            case "mute":
+                                            }
+                                            case "mute" -> {
                                                 if (client.isAdmin() | client.hasNode("mod.mute")) {
                                                     showMuteDialog("Please enter the username of the user to mute.", i);
-                                                }else{
+                                                } else {
                                                     sendPrivateMessage("You are not allowed to do this!", client);
                                                 }
+                                            }
+                                            case "help" -> {
+                                                List<String> lines = new ArrayList<>();
+                                                if (args.length == 0) {
+                                                    lines.add("Commands list - Default");
+                                                    lines.add("/reqadmin - Request admin privileges from the server.");
+                                                    lines.add("/msg <user> <message> - Sends a private message to a user.");
+                                                    lines.add("/kick - Opens the kick dialog.");
+                                                    lines.add("/ban - Opens the ban dialog.");
+                                                    lines.add("/getip <user> - Gets a user's ip address.");
+                                                    lines.add("/list - Shows all the users in the server.");
+                                                    lines.add("/mute - Prevents user's from talking.");
+                                                    lines.add("/help [mod] - Shows the help menu.");
+                                                }else{
+                                                    int findindex = -1;
+                                                    for (int i2 = 0; i2 < API.mods.size(); i2++) {
+                                                        if (API.mods.get(i2).getName().equalsIgnoreCase(args[0])) {
+                                                            lines.add("Commands list - " + API.mods.get(i2).getName());
+                                                            if (API.mods.get(i2).getCommands() != null) {
+                                                                for (int i3 = 0; i3 < API.mods.get(i2).getCommands().size(); i3++) {
+                                                                    if (API.mods.get(i2).getCommands().get(i3).args.length > 0) {
+                                                                        StringBuilder builder = new StringBuilder();
+                                                                        for (String[] arg : API.mods.get(i2).getCommands().get(i3).args) {
+                                                                            if (Objects.equals(arg[1], "notreq")) {
+                                                                                builder.append("[").append(arg[0]).append("]");
+                                                                            } else {
+                                                                                builder.append("<").append(arg[0]).append(">");
+                                                                            }
+                                                                        }
+                                                                        if (API.mods.get(i2).getCommands().get(i3).args.length > 0) {
+                                                                            lines.add(API.mods.get(i2).getCommands().get(i3).name + " " + builder + " - " + API.mods.get(i2).getCommands().get(i3).description);
+                                                                        } else {
+                                                                            lines.add(API.mods.get(i2).getCommands().get(i3).name + " - " + API.mods.get(i2).getCommands().get(i3).description);
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                            findindex = i2;
+                                                            break;
+                                                        }
+                                                    }
+                                                    if (findindex == -1) {
+                                                        lines.add("Unknown mod: " + args[0]);
+                                                    }
+                                                }
+                                                sendPrivateMessageBurst(lines, client);
+                                            }
+                                            default -> {
+                                                if (!API.command(client, parseddata[0], args)) {
+                                                    sendPrivateMessage("Unknown command. Use /help for a list of commands", client);
+                                                }
+                                            }
                                         }
-                                    }else {
-                                        sendMessage(client.getUserName() + ": " + parseddata[1], i);
+                                    } else {
+                                        if (API.message(client, parseddata[1])) {
+                                            sendMessage(client.getUserName() + ": " + parseddata[1], i);
+                                        }
                                     }
 
                                 } else {
@@ -240,30 +301,39 @@ public class Server {
                                 if (getClientsByName(client.getUserName()).size() == 1) {
                                     if (client.getUserName().contains("@") | client.getUserName().contains("\\") | client.getUserName().contains("$") | client.getUserName().contains(")") | client.getUserName().contains("(") | client.getUserName().contains("*") | client.getUserName().contains("%") | client.getUserName().contains("!") | client.getUserName().contains("#") | client.getUserName().contains("$")) {
                                         sendPrivateMessage("You tried to join with a blocked username! Please remove your modification.", i);
-                                        System.out.println("Invalid username kick.");
-                                        client.getConnection().close();
+                                        setDisconnectReason(client, "You tried to join with a blocked username! Please remove your modification.");
+                                        closeConnection(client);
                                     } else {
                                         if (BanManager.isBanned(client.getConnection().getInetAddress().getHostAddress())) {
                                             System.out.println("Banned");
                                             sendPrivateMessage("You have been banned from this server!", i);
                                             sendPrivateMessage(BanManager.getReason(client.getConnection().getInetAddress().getHostAddress()), i);
-                                            client.getConnection().close();
+                                            setDisconnectReason(client, "You have been banned for: " + BanManager.getReason(client.getConnection().getInetAddress().getHostAddress()));
+                                            closeConnection(client);
 
                                         } else {
                                             if (client.getUserName().length() > 3 && client.getUserName().length() < 14) {
-                                                client.setJoined(true);
-                                                sendMessage(client.getUserName() + " joined!");
+                                                UsernameResponse api = API.username(client, client.getUserName());
+                                                if (api.redo) {
+                                                    sendPrivateMessage(api.redomessage, client);
+                                                    setDisconnectReason(client, api.redomessage);
+                                                    closeConnection(client);
+                                                }else{
+                                                    client.setJoined(true);
+                                                    API.join(client);
+                                                    sendMessage(client.getUserName() + " joined!");
+                                                }
                                             } else {
-                                                System.out.println("Invalid");
                                                 sendPrivateMessage("You tried to join with an invalid username!", client);
-                                                client.getConnection().close();
+                                                setDisconnectReason(client, "You tried to join with an invalid username!");
+                                                closeConnection(client);
                                             }
                                         }
                                     }
                                 } else {
                                     sendPrivateMessage("You tried to join with a username already in the server!", i);
-                                    System.out.println("invalid un");
-                                    client.getConnection().close();
+                                    setDisconnectReason(client, "You tried to join with a username already in the server!");
+                                    closeConnection(client);
                                 }
                                 break;
                             case "KK":
@@ -273,7 +343,8 @@ public class Server {
                                         if (getClientsByName(args[0]).size() > 0) {
                                             Client target = getClientsByName(args[0]).get(0);
                                             sendPrivateMessage(args[1], target);
-                                            target.getConnection().close();
+                                            setDisconnectReason(target, args[1]);
+                                            closeConnection(target);
                                             System.out.println(target.getUserName() + " was kicked.");
                                             sendPrivateMessage("Kicked " + target.getUserName() + " for " + args[1], client);
                                         } else {
@@ -292,7 +363,8 @@ public class Server {
                                             sendPrivateMessage("You have been banned from this server!", target);
                                             sendPrivateMessage(args[1], target);
                                             BanManager.banUser(target.getConnection().getInetAddress().getHostAddress(), args[1]);
-                                            target.getConnection().close();
+                                            setDisconnectReason(target, args[1]);
+                                            closeConnection(target);
                                             sendPrivateMessage("Banned " + target.getUserName() + " for " + args[1], client);
                                         } else {
                                             sendPrivateMessage("That user is offline!", client);
@@ -311,27 +383,32 @@ public class Server {
                                             sendPrivateMessage("You have been muted.", target);
                                             sendPrivateMessage(args[1], target);
                                             target.setMuted(true);
-                                            target.getConnection().close();
+                                            closeConnection(target);
                                             sendPrivateMessage("Muted " + target.getUserName() + " for " + args[1], client);
                                         } else {
                                             sendPrivateMessage("That user is offline!", client);
                                         }
                                     }
-                                }else{
+                                } else {
                                     sendPrivateMessage("You are not allowed to do this!", client);
                                 }
                                 break;
-                            }
+                            case "exit":
+                                client.setRunning(false);
+                            default:
+                                if (!API.packet(client, parseddata[0], parseddata[1])) {
+                                    System.out.println("Invalid packet detected.");
+                                }
                         }
                     }
-                } catch (Exception e) {
-                    System.err.println("An error occured.");
                 }
-            if (client.getConnection().isClosed()) {
-                break;
+            } catch (Exception e) {
+                System.err.println("An error occurred.");
+                e.printStackTrace();
             }
-        }
+        } while (client.getRunning());
         System.out.println("Client left: " + client.getUserName());
+        API.leave(client);
         sendMessage(client.getUserName() + " left!");
         clients.remove(client);
     }
@@ -339,7 +416,7 @@ public class Server {
 
     public static void requestAdmin(int clientid) {
         Thread adminreq = new Thread(() -> {
-           int result = JOptionPane.showOptionDialog(null, (clients.get(clientid).getUserName() + "wants to get admin."), "Admin Prompt", JOptionPane.YES_NO_CANCEL_OPTION, JOptionPane.QUESTION_MESSAGE, null, new String[]{"Give Admin", "Kick User", "Cancel"}, 2);
+           int result = JOptionPane.showOptionDialog(null, (clients.get(clientid).getUserName() + " wants to get admin."), "Admin Prompt", JOptionPane.YES_NO_CANCEL_OPTION, JOptionPane.QUESTION_MESSAGE, null, new String[]{"Give Admin", "Kick User", "Cancel"}, 2);
            if (result == 0) {
                clients.get(clientid).setAdmin(true);
                sendPrivateMessage("You are now a server operator.", clientid);
@@ -347,7 +424,8 @@ public class Server {
                String reason = JOptionPane.showInputDialog("Please enter kick reason:");
                sendPrivateMessage(reason, clientid);
                try {
-                   clients.get(clientid).getConnection().close();
+                   setDisconnectReason(clientid, reason);
+                   closeConnection(clients.get(clientid));
                }catch (Exception ignored) {
 
                }
@@ -355,14 +433,41 @@ public class Server {
         });
         adminreq.start();
     }
+
+    public static void setDisconnectReason(int clientid, String reason) {
+        try {
+            if (!clients.get(clientid).getConnection().isClosed()) {
+                PrintWriter writer = new PrintWriter(clients.get(clientid).getConnection().getOutputStream());
+                writer.println("STKR@" + escapeString(reason));
+                writer.flush();
+            }
+        }catch (Exception e) {
+            System.err.println("Something went wrong while sending a packet.");
+        }
+    }
+
+    public static void setDisconnectReason(Client client, String reason) {
+        try {
+            if (!client.getConnection().isClosed()) {
+                PrintWriter writer = new PrintWriter(client.getConnection().getOutputStream());
+                writer.println("STKR@" + escapeString(reason));
+                writer.flush();
+            }
+        }catch (Exception e) {
+            System.err.println("Something went wrong while sending a packet.");
+        }
+    }
     public static void sendMessage(String message) {
         for (Client client : clients) {
             try {
-                PrintWriter writer = new PrintWriter(client.getConnection().getOutputStream(), true);
-                writer.println("MSG@" + escapeString(message));
-                writer.flush();
+                if (!client.getConnection().isClosed()) {
+                    PrintWriter writer = new PrintWriter(client.getConnection().getOutputStream(), true);
+                    writer.println("MSG@" + escapeString(message));
+                    writer.flush();
+                }
             }catch (Exception e) {
                 System.err.println("Something went wrong while sending a message. Here's a rundown of the error:");
+                e.printStackTrace();
             }
         }
     }
@@ -370,13 +475,15 @@ public class Server {
     public static void sendMessageBurst(List<String> messages) {
         for (Client client : clients) {
             try {
-                PrintWriter writer = new PrintWriter(client.getConnection().getOutputStream(), true);
-                StringBuilder builder = new StringBuilder();
-                for (String line : messages) {
-                    builder.append(escapeString(line)).append("&");
+                if (!client.getConnection().isClosed()) {
+                    PrintWriter writer = new PrintWriter(client.getConnection().getOutputStream(), true);
+                    StringBuilder builder = new StringBuilder();
+                    for (String line : messages) {
+                        builder.append(escapeString(line)).append("&");
+                    }
+                    writer.println("MSGB@" + builder);
+                    writer.flush();
                 }
-                writer.println("MSGB@" + builder);
-                writer.flush();
             }catch (Exception e) {
                 System.err.println("Something went wrong while sending a message. Here's a rundown of the error:");
             }
@@ -385,13 +492,15 @@ public class Server {
 
     public static void sendPrivateMessageBurst(List<String> messages, int clientid) {
         try {
-            PrintWriter writer = new PrintWriter(clients.get(clientid).getConnection().getOutputStream(), true);
-            StringBuilder builder = new StringBuilder();
-            for (String line : messages) {
-                builder.append(escapeString(line)).append("&");
+            if (!clients.get(clientid).getConnection().isClosed()) {
+                PrintWriter writer = new PrintWriter(clients.get(clientid).getConnection().getOutputStream(), true);
+                StringBuilder builder = new StringBuilder();
+                for (String line : messages) {
+                    builder.append(escapeString(line)).append("&");
+                }
+                writer.println("MSGB@" + builder);
+                writer.flush();
             }
-            writer.println("MSGB@" + builder);
-            writer.flush();
         }catch (Exception e) {
             System.err.println("Something went wrong while sending a message. Here's a rundown of the error:");
         }
@@ -399,13 +508,15 @@ public class Server {
 
     public static void sendPrivateMessageBurst(List<String> messages, Client client) {
         try {
-            PrintWriter writer = new PrintWriter(client.getConnection().getOutputStream(), true);
-            StringBuilder builder = new StringBuilder();
-            for (String line : messages) {
-                builder.append(escapeString(line)).append("&");
+            if (!client.getConnection().isClosed()) {
+                PrintWriter writer = new PrintWriter(client.getConnection().getOutputStream(), true);
+                StringBuilder builder = new StringBuilder();
+                for (String line : messages) {
+                    builder.append(escapeString(line)).append("&");
+                }
+                writer.println("MSGB@" + builder);
+                writer.flush();
             }
-            writer.println("MSGB@" + builder);
-            writer.flush();
         }catch (Exception e) {
             System.err.println("Something went wrong while sending a message. Here's a rundown of the error:");
         }
@@ -414,10 +525,12 @@ public class Server {
     public static void sendMessage(String message, int excluded) {
         for (Client client : clients) {
             try {
-                if (!clients.get(excluded).equals(client)) {
-                    PrintWriter writer = new PrintWriter(client.getConnection().getOutputStream(), true);
-                    writer.println("MSG@" + escapeString(message));
-                    writer.flush();
+                if (!client.getConnection().isClosed()) {
+                    if (!clients.get(excluded).equals(client)) {
+                        PrintWriter writer = new PrintWriter(client.getConnection().getOutputStream(), true);
+                        writer.println("MSG@" + escapeString(message));
+                        writer.flush();
+                    }
                 }
             }catch (Exception e) {
                 System.err.println("Something went wrong while sending a message. Here's a rundown of the error:");
@@ -426,9 +539,11 @@ public class Server {
     }
     public static void sendPrivateMessage(String message, int clientid) {
         try {
-            PrintWriter writer = new PrintWriter(clients.get(clientid).getConnection().getOutputStream(), true);
-            writer.println("MSG@" + escapeString(message));
-            writer.flush();
+            if (!clients.get(clientid).getConnection().isClosed()) {
+                PrintWriter writer = new PrintWriter(clients.get(clientid).getConnection().getOutputStream(), true);
+                writer.println("MSG@" + escapeString(message));
+                writer.flush();
+            }
         }catch (Exception e) {
             System.err.println("Something went wrong while sending a message. Here's a rundown of the error:");
         }
@@ -436,9 +551,11 @@ public class Server {
 
     public static void sendPrivateMessage(String message, Client client) {
         try {
-            PrintWriter writer = new PrintWriter(client.getConnection().getOutputStream(), true);
-            writer.println("MSG@" + escapeString(message));
-            writer.flush();
+            if (!client.getConnection().isClosed()) {
+                PrintWriter writer = new PrintWriter(client.getConnection().getOutputStream(), true);
+                writer.println("MSG@" + escapeString(message));
+                writer.flush();
+            }
         }catch (Exception e) {
             System.err.println("Something went wrong while sending a message. Here's a rundown of the error:");
         }
@@ -446,9 +563,11 @@ public class Server {
 
     public static void showKickDialog(String message, int clientid) {
         try {
-            PrintWriter writer = new PrintWriter(clients.get(clientid).getConnection().getOutputStream(), true);
-            writer.println("KKD@" + escapeString(message));
-            writer.flush();
+            if (!clients.get(clientid).getConnection().isClosed()) {
+                PrintWriter writer = new PrintWriter(clients.get(clientid).getConnection().getOutputStream(), true);
+                writer.println("KKD@" + escapeString(message));
+                writer.flush();
+            }
         }catch (Exception e) {
             System.err.println("Something went wrong while sending a packet. Here's a rundown of the error:");
         }
@@ -456,9 +575,11 @@ public class Server {
 
     public static void showBanDialog(String message, int clientid) {
         try {
-            PrintWriter writer = new PrintWriter(clients.get(clientid).getConnection().getOutputStream(), true);
-            writer.println("BND@" + escapeString(message));
-            writer.flush();
+            if (!clients.get(clientid).getConnection().isClosed()) {
+                PrintWriter writer = new PrintWriter(clients.get(clientid).getConnection().getOutputStream(), true);
+                writer.println("BND@" + escapeString(message));
+                writer.flush();
+            }
         }catch (Exception e) {
             System.err.println("Something went wrong while sending a packet. Here's a rundown of the error:");
         }
@@ -466,9 +587,11 @@ public class Server {
 
     public static void showMuteDialog(String message, int clientid) {
         try {
-            PrintWriter writer = new PrintWriter(clients.get(clientid).getConnection().getOutputStream(), true);
-            writer.println("MED@" + escapeString(message));
-            writer.flush();
+            if (!clients.get(clientid).getConnection().isClosed()) {
+                PrintWriter writer = new PrintWriter(clients.get(clientid).getConnection().getOutputStream(), true);
+                writer.println("MED@" + escapeString(message));
+                writer.flush();
+            }
         }catch (Exception e) {
             System.err.println("Something went wrong while sending a packet. Here's a rundown of the error:");
         }
@@ -476,9 +599,11 @@ public class Server {
 
     public static void sendNameChangeSuccess(int clientid) {
         try {
-            PrintWriter writer = new PrintWriter(clients.get(clientid).getConnection().getOutputStream(), true);
-            writer.println("UNSC@");
-            writer.flush();
+            if (!clients.get(clientid).getConnection().isClosed()) {
+                PrintWriter writer = new PrintWriter(clients.get(clientid).getConnection().getOutputStream(), true);
+                writer.println("UNSC@");
+                writer.flush();
+            }
         }catch (Exception e) {
             System.err.println("Something went wrong while sending a packet. Here's a rundown of the error:");
         }
@@ -496,9 +621,11 @@ public class Server {
 
     public static void sendNameChangeRedo(int clientid, String redomessage) {
         try {
-            PrintWriter writer = new PrintWriter(clients.get(clientid).getConnection().getOutputStream(), true);
-            writer.println("UNRE@" + escapeString(redomessage));
-            writer.flush();
+            if (!clients.get(clientid).getConnection().isClosed()) {
+                PrintWriter writer = new PrintWriter(clients.get(clientid).getConnection().getOutputStream(), true);
+                writer.println("UNRE@" + escapeString(redomessage));
+                writer.flush();
+            }
         }catch (Exception e) {
             System.err.println("Something went wrong while sending a packet. Here's a rundown of the error:");
         }
@@ -510,5 +637,12 @@ public class Server {
     }
     public static String escapeString(String str) {
         return str.replaceAll("\\\\", "\\\\\\\\").replaceAll("@", "\\\\@");
+    }
+
+    public static void closeConnection(Client client) throws IOException{
+        PrintWriter writer = new PrintWriter(client.getConnection().getOutputStream(), true);
+        writer.println("exit");
+        writer.close();
+        client.getConnection().close();
     }
 }
